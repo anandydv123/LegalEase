@@ -1,5 +1,9 @@
+export const MIN_PROBLEM_LENGTH = 10;
+export const MAX_PROBLEM_LENGTH = 5000;
+
 export const isValidProblem = (problem: string): boolean => {
-  return problem.trim().length >= 10;
+  const len = problem.trim().length;
+  return len >= MIN_PROBLEM_LENGTH && len <= MAX_PROBLEM_LENGTH;
 };
 
 export const containsSensitiveInfo = (text: string): boolean => {
