@@ -1,43 +1,94 @@
 import { LegalAnalysis, ChatMessage } from '../types';
 
+// Simple in-memory cache for the current session
+const analysisCache: Record<string, { data: LegalAnalysis; isDemo: boolean }> = {};
+
 export const analyzeIssue = async (
   problem: string,
   category: string,
   jurisdiction: string,
   history: ChatMessage[] = []
 ): Promise<{ data: LegalAnalysis; isDemo: boolean }> => {
-  const response = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ problem, category, jurisdiction, history }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    if (errorData.error === 'DEMO_MODE') {
-      return { data: errorData.demoData, isDemo: true };
-    }
-    throw new Error(errorData.message || 'Failed to analyze issue');
+  const cacheKey = `${jurisdiction}-${category}-${problem.trim()}`;
+  
+  if (analysisCache[cacheKey]) {
+    return analysisCache[cacheKey];
   }
 
-  const data = await response.json();
-  return { data, isDemo: false };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+  try {
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ problem, category, jurisdiction, history }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Received non-JSON response from server.');
+    }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      const errorMessage = result.error?.message || result.message || 'Failed to analyze issue';
+      throw new Error(errorMessage);
+    }
+
+    if (result.demo) {
+      return { data: result.data, isDemo: true };
+    }
+
+    const finalResult = { data: result, isDemo: false };
+    analysisCache[cacheKey] = finalResult;
+    return finalResult;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Analysis request timed out. Please try again.');
+    }
+    throw err;
+  }
 };
 
 export const sendMessage = async (
   message: string,
   history: ChatMessage[]
 ): Promise<string> => {
-  const response = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
 
-  if (!response.ok) {
-    throw new Error('Failed to send message');
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Received non-JSON response from server.');
+    }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      const errorMessage = result.error?.message || result.message || 'Failed to send message';
+      throw new Error(errorMessage);
+    }
+
+    return result.text;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Chat request timed out.');
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  return data.text;
 };
