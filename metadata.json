@@ -1,0 +1,6 @@
+{
+  "name": "LegalEase AI",
+  "description": "AI-powered legal information assistant helping people understand legal issues in simple language, with structured guidance and next steps.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
